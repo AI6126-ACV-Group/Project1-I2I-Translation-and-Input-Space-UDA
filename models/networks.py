@@ -9,7 +9,6 @@ from torch.optim import lr_scheduler
 # Helper Functions
 ###############################################################################
 
-
 class Identity(nn.Module):
     def forward(self, x):
         return x
@@ -162,7 +161,6 @@ def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, in
 
 def define_D(input_nc, ndf, netD, n_layers_D=3, norm="batch", init_type="normal", init_gain=0.02):
     """Create a discriminator
-
     Parameters:
         input_nc (int)     -- the number of channels in input images
         ndf (int)          -- the number of filters in the first conv layer
@@ -277,7 +275,6 @@ class GANLoss(nn.Module):
 
 def cal_gradient_penalty(netD, real_data, fake_data, device, type="mixed", constant=1.0, lambda_gp=10.0):
     """Calculate the gradient penalty loss, used in WGAN-GP paper https://arxiv.org/abs/1704.00028
-
     Arguments:
         netD (network)              -- discriminator network
         real_data (tensor array)    -- real images

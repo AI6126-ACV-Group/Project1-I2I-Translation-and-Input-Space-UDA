@@ -1,7 +1,5 @@
 import os
-
 from PIL import Image
-
 
 def get_file_paths(folder):
     image_file_paths = []

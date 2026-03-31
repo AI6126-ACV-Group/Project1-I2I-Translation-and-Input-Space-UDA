@@ -160,7 +160,7 @@ class Visualizer:
         for k, v in losses.items():
             message += f", {k}: {v:.3f}"
         message += "\n"
-        print(message)  # print the message on ALL ranks with rank info
+        #print(message)  # print the message on ALL ranks with rank info
 
         # Only save to log file on main process (rank 0)
         if local_rank == 0:
