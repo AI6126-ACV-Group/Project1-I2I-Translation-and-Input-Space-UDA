@@ -58,9 +58,9 @@ def split_uda_dataset(source_a, source_b, output_root, split_ratio=0.8, extensio
 if __name__ == "__main__":
     # 请在此处填入你的实际路径
     config = {
-        "source_a": "./MINST",
-        "source_b": "./USPS",
-        "output_root": "MINST2USPS",
+        "source_a": "../original_datasets/officehome/Art",
+        "source_b": "../original_datasets/officehome/Real World",
+        "output_root": "art2realworld",
         "split_ratio": 0.8
     }
 
