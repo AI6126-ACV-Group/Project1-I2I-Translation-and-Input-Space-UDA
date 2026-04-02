@@ -63,11 +63,15 @@ class Visualizer:
 
         # Initialize wandb if enabled
         if self.use_wandb:
+            wandb_key = getattr(opt, "wandb_key", None)
+            if wandb_key:
+                import os
+                os.environ["WANDB_API_KEY"] = wandb_key
             # Only initialize wandb on main process (rank 0)
             if not dist.is_initialized() or dist.get_rank() == 0:
-                self.wandb_project_name = getattr(opt, "wandb_project_name", "CycleGAN-and-pix2pix")
+                self.wandb_project_name = getattr(opt, "wandb_project_name", "CycleGAN")
                 self.wandb_run = wandb.init(project=self.wandb_project_name, name=opt.name, config=opt) if not wandb.run else wandb.run
-                self.wandb_run._label(repo="CycleGAN-and-pix2pix")
+                self.wandb_run._label(repo="CycleGAN")
             else:
                 self.wandb_run = None
 
@@ -161,7 +165,6 @@ class Visualizer:
             message += f", {k}: {v:.3f}"
         message += "\n"
         #print(message)  # print the message on ALL ranks with rank info
-
         # Only save to log file on main process (rank 0)
         if local_rank == 0:
             with open(self.log_name, "a") as log_file:

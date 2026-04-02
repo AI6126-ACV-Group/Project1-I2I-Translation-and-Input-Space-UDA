@@ -38,6 +38,7 @@ if __name__ == "__main__":
     model.setup(opt)  # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)  # create a visualizer that display/save images and plots
     total_iters = 0  # the total number of training iterations
+
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()  # timer for data loading per iteration
@@ -47,8 +48,17 @@ if __name__ == "__main__":
         if hasattr(dataset, "set_epoch"):
             dataset.set_epoch(epoch)
 
+        is_main_process = getattr(opt, 'local_rank', 0) == 0
+
         total_imgs = len(dataset)
-        pbar = tqdm(total=total_imgs, desc=f"Epoch [{epoch}/{opt.n_epochs + opt.n_epochs_decay}]", unit="images")
+        pbar = tqdm(
+            total=total_imgs,
+            desc=f"Epoch [{epoch}/{opt.n_epochs + opt.n_epochs_decay}]",
+            unit="images",
+            disable=not is_main_process,  # 非主进程不显示
+            mininterval=2.0,  # 每2秒才刷新一次显示，减少日志堆积
+            maxinterval=10.0
+        )
 
         for i, data in enumerate(dataset):  # inner loop within one epoch
             iter_start_time = time.time()  # timer for computation per iteration
@@ -66,11 +76,17 @@ if __name__ == "__main__":
                 visualizer.display_current_results(model.get_current_visuals(), epoch, total_iters, save_result)
 
             if total_iters % opt.print_freq == 0:  # print training losses and save logging information to the disk
+
+                if hasattr(model, 'get_current_visuals'):
+                    current_lr = model.optimizers[0].param_groups[0]['lr']
+
                 losses = model.get_current_losses()
-                desc_str = ", ".join([f"{k}: {v:.3f}" for k, v in losses.items()])
+                desc_str = f"lr: {current_lr:.6f}, " + ", ".join([f"{k}: {v:.3f}" for k, v in losses.items()])
                 pbar.set_postfix_str(desc_str)
+
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
+                #visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data) #use tqdm to replace
+                losses['lr'] = current_lr
                 visualizer.plot_current_losses(total_iters, losses)
 
             if total_iters % opt.save_latest_freq == 0:  # cache our latest model every <save_latest_freq> iterations

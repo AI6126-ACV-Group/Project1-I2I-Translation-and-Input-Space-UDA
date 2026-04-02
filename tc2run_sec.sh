@@ -20,16 +20,16 @@
 ##SBATCH --nodelist=TC2N01
 
 ### Specify Time Limit, format: <min> or <min>:<sec> or <hr>:<min>:<sec> or <days>-<hr>:<min>:<sec> or <days>-<hr> ###
-#SBATCH --time=4:00:00
+#SBATCH --time=6:00:00
 
 ### Specify name for the job, filename format for output and error ###
-#SBATCH --job-name=control_net_train
-#SBATCH --output=control_net_train.out
-#SBATCH --error=control_net_train.err
+#SBATCH --job-name=fg_cyclegan
+#SBATCH --output=fg_cyclegan.out
+#SBATCH --error=fg_cyclegan.err
 
 ### Your script for computation ###
 module load anaconda
 eval "$(conda shell.bash hook)"
 conda activate PYTHON3.10_TORCH2.8
-python train.py --dataroot ./datasets/photo2sketch --name photo2sketch_cyclegan --model cycle_gan --load_size 280 --crop_size 256 --display_winsize 256 --batch_size 16 --print_freq 200 --n_epochs 200 --n_epochs_decay 0 --use_wandb --wandb_project_name photo2sketch_test --wandb_key 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
+python train.py --dataroot ./datasets/photo2sketch --name photo2sketch_fg_cyclegan --model fg_cycle_gan --load_size 150 --crop_size 128 --display_winsize 128 --batch_size 16 --print_freq 200 --n_epochs 200 --n_epochs_decay 0 --use_wandb --wandb_project_name photo2sketch_test_fg --wandb_key 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
 
