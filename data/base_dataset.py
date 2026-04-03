@@ -70,10 +70,17 @@ def get_params(opt, size):
     elif opt.preprocess == "scale_width_and_crop":
         new_w = opt.load_size
         new_h = opt.load_size * h // w
+    ## zy 修改：增加不会产生黑边的修改模式
+    elif opt.preprocess == "rescale_shortside":
+        if w < h:
+            new_w = opt.load_size
+            new_h = opt.load_size * h // w
+        else:
+            new_h = opt.load_size
+            new_w = opt.load_size * w // h
 
     x = random.randint(0, np.maximum(0, new_w - opt.crop_size))
     y = random.randint(0, np.maximum(0, new_h - opt.crop_size))
-
     flip = random.random() > 0.5
 
     return {"crop_pos": (x, y), "flip": flip}
