@@ -5,41 +5,48 @@ from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
 
-
 class FrequencyLoss(torch.nn.Module):
     # Referecne: Frequency-Domain-Based Structure Losses for CycleGAN-Based Cone-Beam Computed Tomography Translation
     # frequency loss to train cycle-gan
-    # Loss_freq = L1_Loss(tanh(abs(Shift(FFT(x))) * Mask),tanh(abs(Shift(FFT(y))) * Mask) )
-    # (Latex) $$\mathcal{L}_{freq}(x, y) = \| \text{tanh}(|\mathcal{F}_{shift}(\text{DFT}(x))| \cdot M) - \text{tanh}(|\mathcal{F}_{shift}(\text{DFT}(y))| \cdot M) \|_1$$
+    # L_gfl(x, y) = (1 / (M * N)) * Σ [ w(u,v) * | tanh(|F_shift(DFT(x))|{u,v}) - tanh(|F_shift(DFT(y))|{u,v}) | ]
+    # (Latex) $$\mathcal{L}_{GFL}(x, y) = \frac{1}{M \times N} \sum_{u=0}^{M-1} \sum_{v=0}^{N-1} w(u,v) \cdot \left| \tanh\left(\left| \mathcal{F}_{shift}(\text{DFT}(x)) \right|_{u,v}\right) - \tanh\left(\left| \mathcal{F}_{shift}(\text{DFT}(y)) \right|_{u,v}\right) \right|$$
+    # (Latex) $$w(u,v) = \alpha \cdot (Dist_{u,v})^\beta$$
 
-    def __init__(self, mask_radius=0.3):
+    def __init__(self, alpha=1.0, beta=-0.5):
         super(FrequencyLoss, self).__init__()
-        self.l1_loss = torch.nn.L1Loss()
-        self.mask_radius = mask_radius
+        self.alpha = alpha
+        self.beta = beta #默认低通
+        self.l1_loss = torch.nn.L1Loss(reduction='none')  # 逐像素加权需设为 none
 
     def forward(self, x, y):
-        # 快速傅里叶变换 (FFT)
-        x_fft = torch.fft.fftn(x, dim=(-2, -1))
-        y_fft = torch.fft.fftn(y, dim=(-2, -1))
-        # 移频使零频分量居中 (Shift)
-        x_fft = torch.fft.fftshift(x_fft, dim=(-2, -1))
-        y_fft = torch.fft.fftshift(y_fft, dim=(-2, -1))
-        # 低通滤波
-        # 只保留频谱图中心的低频部分
-        h, w = x_fft.shape[-2:]
-        cy, cx = h // 2, w // 2
-        r = int(min(h, w) * self.mask_radius)
-        # 创建一个基于mask_radius的方形Mask
-        mask = torch.zeros_like(x_fft).to(x.device)
-        mask[:, :, cy - r:cy + r, cx - r:cx + r] = 1
+        # 1. FFT 变换并移频
+        x_fft = torch.fft.fftshift(torch.fft.fftn(x, dim=(-2, -1),norm="ortho"), dim=(-2, -1))
+        y_fft = torch.fft.fftshift(torch.fft.fftn(y, dim=(-2, -1),norm="ortho"), dim=(-2, -1))
 
-        x_fft = x_fft * mask
-        y_fft = y_fft * mask
-        # 提取幅值并使用 tanh 进行非线性映射（标准化到 0-1）
+        # 2. 提取幅度谱并应用 tanh 非线性映射
+        # 公式参考: tanh(|FFT(x)|)
         x_mag = torch.tanh(torch.abs(x_fft))
         y_mag = torch.tanh(torch.abs(y_fft))
-        # 计算 L1 距离
-        return self.l1_loss(x_mag, y_mag)
+
+        # 3. 生成基于距离的软权重 w(u,v) = alpha * dist^beta
+        h, w = x_mag.shape[-2:]
+        grid_y, grid_x = torch.meshgrid(
+            torch.linspace(-1, 1, h, device=x.device),
+            torch.linspace(-1, 1, w, device=x.device),
+            indexing='ij'
+        )
+        dist = torch.sqrt(grid_x ** 2 + grid_y ** 2)
+
+        # 软掩码权重计算
+        # epsilon (1e-8) 防止中心点距离为 0 时负幂次导致 NaN
+        #当 $\beta < 0$ 时（低通倾向）： 距离中心越近（$Dist$ 越小），权重 $w$ 越大；距离中心越远，$w$ 迅速衰减。
+        soft_mask = self.alpha * torch.pow(dist + 1e-8, self.beta)
+
+        # 4. 计算加权 L1 损失
+        diff = self.l1_loss(x_mag, y_mag)
+        weighted_loss = diff * soft_mask
+
+        return weighted_loss.mean()
 
 
 class FGCycleGANModel(BaseModel):
@@ -62,7 +69,7 @@ class FGCycleGANModel(BaseModel):
         Returns:
             the modified parser.
 
-        For FG_CycleGAN, in addition to cycle GAN losses, introduce frequency loss to replace original L1 loss
+        For FG_CycleGAN, in addition to cycle GAN losses, introduce frequency loss
         Generators: G_A: A -> B; G_B: B -> A.
         Discriminators: D_A: G_A(A) vs. B; D_B: G_B(B) vs. A.
         Forward cycle loss (pixel):  loss_cycle_A = L1 (rec_A, real_A) (default zero)
@@ -80,16 +87,16 @@ class FGCycleGANModel(BaseModel):
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
         if is_train:
             # default setting is only use frequency cycle loss
-            parser.add_argument("--lambda_A", type=float, default=0.0, help="weight for cycle loss (A -> B -> A)")
-            parser.add_argument("--lambda_B", type=float, default=0.0, help="weight for cycle loss (B -> A -> B)")
+            parser.add_argument("--lambda_A", type=float, default=10.0, help="weight for cycle loss (A -> B -> A)")
+            parser.add_argument("--lambda_B", type=float, default=10.0, help="weight for cycle loss (B -> A -> B)")
 
-            parser.add_argument("--lambda_FA", type=float, default=10.0, help="weight for freq cycle loss (A -> B -> A)")
-            parser.add_argument("--lambda_FB", type=float, default=10.0, help="weight for freq cycle loss (B -> A -> B)")
+            parser.add_argument("--lambda_FA", type=float, default=5.0, help="weight for freq cycle loss (A -> B -> A)")
+            parser.add_argument("--lambda_FB", type=float, default=5.0, help="weight for freq cycle loss (B -> A -> B)")
 
             parser.add_argument(
                 "--lambda_identity",
                 type=float,
-                default=0.0,
+                default=0.5,
                 help="use identity mapping. "
                      "Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. "
                      "For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1"
@@ -231,9 +238,9 @@ class FGCycleGANModel(BaseModel):
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
         # Forward cycle loss (frequency guided)
-        self.loss_freq_A = self.criterionFreq(self.rec_A, self.real_A) * lambda_FA
-        # Backward cycle loss  (frequency guided)
-        self.loss_freq_B = self.criterionFreq(self.rec_B, self.real_B) * lambda_FB
+        self.loss_freq_A = self.criterionFreq(self.fake_A, self.real_A) * lambda_FA
+        # Backward frequency loss  (frequency guided)
+        self.loss_freq_B = self.criterionFreq(self.fake_B, self.  real_B) * lambda_FB
 
         # combined loss and calculate gradients
         self.loss_G = (self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B
