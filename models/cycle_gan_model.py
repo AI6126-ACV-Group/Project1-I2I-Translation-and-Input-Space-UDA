@@ -46,7 +46,7 @@ class CycleGANModel(BaseModel):
             parser.add_argument(
                 "--lambda_identity",
                 type=float,
-                default=0.5,
+                default=0.2,
                 help="use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1",
             )
 
@@ -193,9 +193,15 @@ class CycleGANModel(BaseModel):
         self.optimizer_G.zero_grad()  # set G_A and G_B's gradients to zero
         self.backward_G()  # calculate gradients for G_A and G_B
         self.optimizer_G.step()  # update G_A and G_B's weights
+
         # D_A and D_B
         self.set_requires_grad([self.netD_A, self.netD_B], True)
         self.optimizer_D.zero_grad()  # set D_A and D_B's gradients to zero
-        self.backward_D_A()  # calculate gradients for D_A
-        self.backward_D_B()  # calculate graidents for D_B
+        # 只有当 D 的损失不够低时才计算梯度并更新
+        # avoid over powered D net
+        if self.loss_D_A > 0.13:
+            self.backward_D_A()
+        if self.loss_D_B > 0.13:
+            self.backward_D_B()
+
         self.optimizer_D.step()  # update D_A and D_B's weights
