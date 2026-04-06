@@ -90,8 +90,8 @@ class FGCycleGANModel(BaseModel):
             parser.add_argument("--lambda_A", type=float, default=10.0, help="weight for cycle loss (A -> B -> A)")
             parser.add_argument("--lambda_B", type=float, default=10.0, help="weight for cycle loss (B -> A -> B)")
 
-            parser.add_argument("--lambda_GA", type=float, default=1, help="weight for generator loss")
-            parser.add_argument("--lambda_GB", type=float, default=1, help="weight for generator loss")
+            parser.add_argument("--lambda_GA", type=float, default=1.0, help="weight for generator loss")
+            parser.add_argument("--lambda_GB", type=float, default=1.0, help="weight for generator loss")
 
             parser.add_argument("--lambda_FA", type=float, default=10.0, help="weight for freq cycle loss (A -> B -> A)")
             parser.add_argument("--lambda_FB", type=float, default=10.0, help="weight for freq cycle loss (B -> A -> B)")
