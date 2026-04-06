@@ -99,7 +99,7 @@ class FGCycleGANModel(BaseModel):
             parser.add_argument(
                 "--lambda_identity",
                 type=float,
-                default=0.0,
+                default=0.2,
                 help="use identity mapping. "
                      "Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. "
                      "For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1"
