@@ -32,4 +32,5 @@ module load anaconda
 eval "$(conda shell.bash hook)"
 conda activate PYTHON3.10_TORCH2.8
 python train.py --dataroot ./datasets/photo2sketch --name photo2sketch_cyclegan --model cycle_gan --load_size 280 --crop_size 256 --display_winsize 256 --batch_size 16 --print_freq 200 --n_epochs 200 --n_epochs_decay 0 --use_wandb --wandb_project_name photo2sketch_test --wandb_key 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
-
+# 128 * 128
+#

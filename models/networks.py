@@ -63,7 +63,18 @@ def get_scheduler(optimizer, opt):
     elif opt.lr_policy == "plateau":
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.2, threshold=0.01, patience=5)
     elif opt.lr_policy == "cosine":
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=opt.n_epochs, eta_min=0)
+        # opt.epoch_count 是恢复训练时的起始轮数
+        # 如果从第 100 轮恢复，则 last_epoch 应设为 100
+        for group in optimizer.param_groups:
+            if 'initial_lr' not in group:
+                group['initial_lr'] = group['lr']
+
+        scheduler = lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=opt.n_epochs,
+            eta_min=0,
+            last_epoch=opt.epoch_count - 1  # 关键修改
+        )
     else:
         return NotImplementedError("learning rate policy [%s] is not implemented", opt.lr_policy)
     return scheduler

@@ -12,7 +12,7 @@ class FrequencyLoss(torch.nn.Module):
     # (Latex) $$\mathcal{L}_{GFL}(x, y) = \frac{1}{M \times N} \sum_{u=0}^{M-1} \sum_{v=0}^{N-1} w(u,v) \cdot \left| \tanh\left(\left| \mathcal{F}_{shift}(\text{DFT}(x)) \right|_{u,v}\right) - \tanh\left(\left| \mathcal{F}_{shift}(\text{DFT}(y)) \right|_{u,v}\right) \right|$$
     # (Latex) $$w(u,v) = \alpha \cdot (Dist_{u,v})^\beta$$
 
-    def __init__(self, alpha=1.0, beta=-0.5):
+    def __init__(self, alpha=1.0, beta=-1.0):
         super(FrequencyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta #默认低通
@@ -90,8 +90,11 @@ class FGCycleGANModel(BaseModel):
             parser.add_argument("--lambda_A", type=float, default=10.0, help="weight for cycle loss (A -> B -> A)")
             parser.add_argument("--lambda_B", type=float, default=10.0, help="weight for cycle loss (B -> A -> B)")
 
-            parser.add_argument("--lambda_FA", type=float, default=5.0, help="weight for freq cycle loss (A -> B -> A)")
-            parser.add_argument("--lambda_FB", type=float, default=5.0, help="weight for freq cycle loss (B -> A -> B)")
+            parser.add_argument("--lambda_GA", type=float, default=1, help="weight for generator loss")
+            parser.add_argument("--lambda_GB", type=float, default=1, help="weight for generator loss")
+
+            parser.add_argument("--lambda_FA", type=float, default=10.0, help="weight for freq cycle loss (A -> B -> A)")
+            parser.add_argument("--lambda_FB", type=float, default=10.0, help="weight for freq cycle loss (B -> A -> B)")
 
             parser.add_argument(
                 "--lambda_identity",
@@ -212,6 +215,8 @@ class FGCycleGANModel(BaseModel):
         lambda_idt = self.opt.lambda_identity
         lambda_FA = self.opt.lambda_FA
         lambda_FB = self.opt.lambda_FB
+        lambda_GA = self.opt.lambda_GA
+        lambda_GB = self.opt.lambda_GB
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
 
@@ -228,19 +233,19 @@ class FGCycleGANModel(BaseModel):
             self.loss_idt_B = 0
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True) * lambda_GA
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True) * lambda_GB
 
         # Forward cycle loss  (pixel guided) by default it will be zero
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss  (pixel guided)
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
-        # Forward cycle loss (frequency guided)
-        self.loss_freq_A = self.criterionFreq(self.fake_A, self.real_A) * lambda_FA
-        # Backward frequency loss  (frequency guided)
-        self.loss_freq_B = self.criterionFreq(self.fake_B, self.  real_B) * lambda_FB
+        # Forward loss (frequency guided)
+        self.loss_freq_A = self.criterionFreq(self.fake_A, self. real_A) * lambda_FA
+        # Backward loss  (frequency guided)
+        self.loss_freq_B = self.criterionFreq(self.fake_B, self. real_B) * lambda_FB
 
         # combined loss and calculate gradients
         self.loss_G = (self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B

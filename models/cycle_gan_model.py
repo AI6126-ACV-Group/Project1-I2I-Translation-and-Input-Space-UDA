@@ -37,8 +37,12 @@ class CycleGANModel(BaseModel):
         """
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
         if is_train:
+
             parser.add_argument("--lambda_A", type=float, default=10.0, help="weight for cycle loss (A -> B -> A)")
             parser.add_argument("--lambda_B", type=float, default=10.0, help="weight for cycle loss (B -> A -> B)")
+            parser.add_argument("--lambda_GA", type=float, default=1, help="weight for generator loss")
+            parser.add_argument("--lambda_GB", type=float, default=1, help="weight for generator loss")
+
             parser.add_argument(
                 "--lambda_identity",
                 type=float,
@@ -153,6 +157,9 @@ class CycleGANModel(BaseModel):
         lambda_idt = self.opt.lambda_identity
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
+        lambda_GA = self.opt.lambda_GA
+        lambda_GB = self.opt.lambda_GB
+
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
@@ -166,9 +173,9 @@ class CycleGANModel(BaseModel):
             self.loss_idt_B = 0
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True) * lambda_GA
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True) * lambda_GB
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
