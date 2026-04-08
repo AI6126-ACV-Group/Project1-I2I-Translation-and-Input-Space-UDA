@@ -25,8 +25,12 @@ class FrequencyLoss(torch.nn.Module):
 
         # 2. 提取幅度谱并应用 tanh 非线性映射
         # 公式参考: tanh(|FFT(x)|)
-        x_mag = torch.tanh(torch.abs(x_fft))
-        y_mag = torch.tanh(torch.abs(y_fft))
+        # ZY 260408 修改 为了避免 tanh 饱和丧失梯度，这里修改为log(|FFT(x)+1|)
+        # x_mag = torch.tanh(torch.abs(x_fft))
+        # y_mag = torch.tanh(torch.abs(y_fft))
+        # 使用 log(1 + x) 既能压缩大数值，又能保证在 x=0 时值为 0
+        x_mag = torch.log(torch.abs(x_fft) + 1.0)
+        y_mag = torch.log(torch.abs(y_fft) + 1.0)
 
         # 3. 生成基于距离的软权重 w(u,v) = alpha * dist^beta
         h, w = x_mag.shape[-2:]
@@ -45,6 +49,12 @@ class FrequencyLoss(torch.nn.Module):
         # 4. 计算加权 L1 损失
         diff = self.l1_loss(x_mag, y_mag)
         weighted_loss = diff * soft_mask
+
+        # print(f"\n--- Frequency Loss Debug ---")
+        # print(f"Original Diff Mean: {diff.mean().item():.6f}")
+        # print(f"Weighted Loss Mean: {weighted_loss.mean().item():.6f}")
+        # print(f"Max Weight: {soft_mask.max().item():.2f}")
+        # print(f"X_mag Max (Check Saturation): {x_mag.max().item():.4f}")
 
         return weighted_loss.mean()
 
@@ -95,8 +105,8 @@ class FGCycleGANModel(BaseModel):
             parser.add_argument("--lambda_GA", type=float, default=1.0, help="weight for generator loss")
             parser.add_argument("--lambda_GB", type=float, default=1.0, help="weight for generator loss")
 
-            parser.add_argument("--lambda_FA", type=float, default=10.0, help="weight for freq cycle loss (A -> B -> A)")
-            parser.add_argument("--lambda_FB", type=float, default=10.0, help="weight for freq cycle loss (B -> A -> B)")
+            parser.add_argument("--lambda_FA", type=float, default=1.0, help="weight for freq cycle loss (A -> B -> A)")
+            parser.add_argument("--lambda_FB", type=float, default=1.0, help="weight for freq cycle loss (B -> A -> B)")
 
             parser.add_argument(
                 "--lambda_identity",
