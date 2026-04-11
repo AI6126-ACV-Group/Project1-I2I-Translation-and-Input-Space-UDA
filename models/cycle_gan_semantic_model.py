@@ -5,24 +5,76 @@ from .base_model import BaseModel
 from . import networks
 from torch.autograd import Variable
 import numpy as np
-
+import torch.distributed as dist
 
 ## this is the part I for cy CADA introduce the sem loss
 ## part II is to train the src_net and adda_net
-"""
-domain adaption方法大致可以分为两种。一种是"特征级"(Feature-Level)的，通过对抗训练的方式对齐网络在源域样本与目标域样本上提取得到的特征空间；
-另一种是"像素级"(Pixel-Level)的，也就是直接进行像素级迁移，完成图像的风格转换，进而间接的对齐特征空间。
-从某种直觉上来讲，第二种其实更好一些，因为可解释性更强了那么一点点。比如说，如果图像风格翻译的效果比较好的话，那么领域自适应的效果也就会更好些。
-不过作者指出，像素级的方法有个最大的问题，在于其本身并不是基于更好的下游任务性能(如分割，分类)而设计的，因此翻译后的结果可能丢失语义信息。
-这种语义信息的丢失可能人眼不可见，但是却会对下游任务的效果产生影响。所以addanet的目的就是在下游任务中挖出语义信息，优化下游任务的效果
-"""
+
 
 class CycleGANSemanticModel(BaseModel):
+
+    @staticmethod
+    def modify_commandline_options(parser, is_train=True):
+        """Add new dataset-specific options, and rewrite default values for existing options.
+
+        Parameters:
+            parser          -- original option parser
+            is_train (bool) -- whether training phase or test phase. You can use this flag to add training-specific or test-specific options.
+
+        Returns:
+            the modified parser.
+
+        For FG_CycleGAN, in addition to cycle GAN losses, introduce frequency loss
+        Generators: G_A: A -> B; G_B: B -> A.
+        Discriminators: D_A: G_A(A) vs. B; D_B: G_B(B) vs. A.
+        Forward cycle loss (pixel):  loss_cycle_A = L1 (rec_A, real_A) (default zero)
+        Backward cycle loss (pixel): loss_cycle_B = L1 (rec_A, real_A) (default zero)
+        Forward cycle loss (frequency) : Loss_freq_A = FrequencyLoss(rec_A, real_A)
+        Backward cycle loss (frequency) : Loss_freq_B = FrequencyLoss(rec_B, real_B)
+
+        Loss_G = Loss_G_A + Loss_G_B + (lambda_A * Loss_cycle_A) + (lambda_B * Loss_cycle_B) + (lambda_FA * Loss_freq_A) + (lambda_FB * Loss_freq_B) + (lambda_idt * lambda_B * Loss_idt_A) + (lambda_idt * lambda_A * Loss_idt_B)
+        (Latex) $$\mathcal{L}_{G} = \mathcal{L}_{GAN} + \lambda_{A}\mathcal{L}_{cyc\_A} + \lambda_{B}\mathcal{L}_{cyc\_B} + \lambda_{FA}\mathcal{L}_{freq\_A} + \lambda_{FB}\mathcal{L}_{freq\_B} + \lambda_{idt}(\lambda_{B}\mathcal{L}_{idt\_A} + \lambda_{A}\mathcal{L}_{idt\_B})$$
+
+        Identity loss (optional): lambda_identity * (||G_A(B) - B|| * lambda_B + ||G_B(A) - A|| * lambda_A) (Sec 5.2 "Photo generation from paintings" in the paper)
+
+        Dropout is not used in the original CycleGAN paper.
+        """
+        parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
+        if is_train:
+            # default setting is only use frequency cycle loss
+            parser.add_argument("--D_lr_weight", type=float, default=1.0, help="weight for generator loss")
+
+            parser.add_argument("--lambda_A", type=float, default=10.0, help="weight for cycle loss (A -> B -> A)")
+            parser.add_argument("--lambda_B", type=float, default=10.0, help="weight for cycle loss (B -> A -> B)")
+
+            parser.add_argument("--lambda_GA", type=float, default=1.0, help="weight for generator loss")
+            parser.add_argument("--lambda_GB", type=float, default=1.0, help="weight for generator loss")
+
+
+            parser.add_argument(
+                "--lambda_identity",
+                type=float,
+                default=0.2,
+                help="use identity mapping. "
+                     "Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. "
+                     "For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1"
+                     "If you only want to use frequency loss, please set lambda_identity = 0.0",
+            )
+
+        return parser
+
+
     def name(self):
         return 'CycleGANModel'
 
-    def initialize(self, opt):
-        BaseModel.initialize(self, opt)
+    def __init__(self, opt):
+        """Initialize the CycleGAN class.
+
+        Parameters:
+            opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
+        """
+
+        BaseModel.__init__(self, opt)
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
         self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 
@@ -45,31 +97,34 @@ class CycleGANSemanticModel(BaseModel):
         # load/define networks
         # The naming conversion is different from those used in the paper
         # Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc,
-                                        opt.ngf, opt.which_model_netG, opt.norm, 
-                                        not opt.no_dropout, opt.init_type, self.gpu_ids)
-        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc,
-                                        opt.ngf, opt.which_model_netG, opt.norm, 
-                                        not opt.no_dropout, opt.init_type, self.gpu_ids)
+        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout,
+                                        opt.init_type, opt.init_gain)
+        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout,
+                                        opt.init_type, opt.init_gain)
 
         if self.isTrain:
-            use_sigmoid = opt.no_lsgan
-            self.netD_A = networks.define_D(opt.output_nc, opt.ndf,
-                                            opt.netD,
-                                            opt.n_layers_D, opt.norm, use_sigmoid, 
-                                            opt.init_type, self.gpu_ids)
-            self.netD_B = networks.define_D(opt.input_nc, opt.ndf,
-                                            opt.netG,
-                                            opt.n_layers_D, opt.norm, use_sigmoid, 
-                                            opt.init_type, self.gpu_ids)
+            self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, opt.init_type,
+                                            opt.init_gain)
+            self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, opt.init_type,
+                                            opt.init_gain)
             self.netCLS = networks.define_C(opt.output_nc, opt.ndf, 
-                    init_type=opt.init_type, gpu_ids=self.gpu_ids)
+                                            init_type=opt.init_type, out_feature_num=opt.out_feature_num)
+            # load trained CLS network
+            if not opt.continue_train:
+                print("First time training: Loading pretrained CLS weights...")
+                self.load_network(self.netCLS, 'CLS', 'latest')
+                print("weight loaded")
+            else:
+                print("Continuing training: CLS will be loaded by setup().")
  
         if self.isTrain:
+            if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
+                assert opt.input_nc == opt.output_nc
+
             self.fake_A_pool = ImagePool(opt.pool_size)
             self.fake_B_pool = ImagePool(opt.pool_size)
             # define loss functions
-            self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)
+            self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
             self.criterionCLS = torch.nn.modules.CrossEntropyLoss()
@@ -77,14 +132,14 @@ class CycleGANSemanticModel(BaseModel):
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()),
-                                                lr=opt.lr, betas=(opt.beta1, 0.999))
+                                                lr=opt.lr * opt.D_lr_weight, betas=(opt.beta1, 0.999))
             self.optimizer_CLS = torch.optim.Adam(self.netCLS.parameters(), lr=1e-3, betas=(opt.beta1, 0.999))
             self.optimizers = []
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
     def set_input(self, input):
-        AtoB = self.opt.which_direction == 'AtoB'
+        AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
@@ -93,6 +148,30 @@ class CycleGANSemanticModel(BaseModel):
             self.input_B_label = input['B_label' if AtoB else 'A_label'].to(self.device)
             #self.image_paths = input['B_paths'] # Hack!! forcing the labels to corresopnd to B domain
 
+    def load_network(self, net, net_label, epoch_label):
+        """
+        加载单个指定的网络权重。
+        :param net: 需要加载权重的网络对象 (例如 self.netCLS)
+        :param net_label: 网络的标签名称 (例如 'CLS')
+        :param epoch_label: epoch 标识 (例如 'latest')
+        """
+        # 1. 构造文件名，例如 "latest_net_CLS.pth"
+        load_filename = f"{epoch_label}_net_{net_label}.pth"
+        load_path = self.save_dir / load_filename
+        # 2. 如果是分布式训练，解包模型
+        if isinstance(net, torch.nn.parallel.DistributedDataParallel):
+            net = net.module
+        print(f"loading the model from {load_path}")
+        # 3. 加载权重文件
+        # 注意：确保设置 weights_only=True 以符合最新的安全实践
+        state_dict = torch.load(load_path, map_location=str(self.device), weights_only=True)
+        if hasattr(state_dict, "_metadata"):
+            del state_dict._metadata
+        # 4. 修复 InstanceNorm 的兼容性问题
+        for key in list(state_dict.keys()):
+            self._BaseModel__patch_instance_norm_state_dict(state_dict, net, key.split("."))
+        # 5. 正式加载到网络中
+        net.load_state_dict(state_dict)
 
     def forward(self):
         self.fake_B = self.netG_A(self.real_A)

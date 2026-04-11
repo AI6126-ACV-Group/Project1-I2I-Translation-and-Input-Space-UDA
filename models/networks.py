@@ -1,9 +1,9 @@
-import torch
-import torch.nn as nn
-from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
-
+import torch
+import torch.nn as nn
+from torchvision import models
+from torch.nn import init
 
 ###############################################################################
 # Helper Functions
@@ -210,6 +210,35 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm="batch", init_type="normal"
         raise NotImplementedError("Discriminator model name [%s] is not recognized" % netD)
     return net
 
+
+def define_C(input_nc, ndf, init_type='normal', gpu_ids=[] , out_feature_num=10):
+    """
+    创建一个基于 ResNet-18 的分类器。
+    input_nc: 输入通道数 (例如 3 代表 RGB, 1 代表灰度图)
+    ndf: 这里在 ResNet 中虽然不直接对应，但可以保留接口一致性
+    """
+    # 1. 加载预训练的 ResNet-18
+    # 注意：在 torchvision 新版本中建议使用 weights=models.ResNet18_Weights.IMAGENET1K_V1
+    net = models.resnet18(pretrained=True)
+    # 2. 修改第一层卷积以适配你的 input_nc
+    # ResNet-18 默认输入是 3 通道，如果你的数据是单通道，需要修改
+    if input_nc != 3:
+        net.conv1 = nn.Conv2d(input_nc, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        # 重新初始化这一层，因为修改了结构
+        init.normal_(net.conv1.weight, 0.0, 0.02)
+
+    # 修改最后的全连接层 (fc)
+    num_ftrs = net.fc.in_features
+    net.fc = nn.Linear(num_ftrs, out_feature_num)
+    init.normal_(net.fc.weight, 0.0, 0.02)
+
+    # 部署 GPU
+    if len(gpu_ids) > 0:
+        assert (torch.cuda.is_available())
+        net.to(gpu_ids[0])
+        net = torch.nn.DataParallel(net, gpu_ids)
+
+    return net
 
 ##############################################################################
 # Classes

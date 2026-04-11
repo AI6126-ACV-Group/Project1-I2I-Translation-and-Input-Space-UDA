@@ -29,6 +29,10 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
         parser.add_argument('--lr_policy', type=str, default='cosine', help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=100, help='multiply by a gamma every lr_decay_iters iterations')
+        # for cyCADA CLS NET
+        parser.add_argument('--out_feature_num', type=int, default=31, help='the number of output feature classes')
+
+
         self.isTrain = True
 
         return parser
