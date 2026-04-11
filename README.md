@@ -33,6 +33,25 @@ the simplest testing command:
 
 you can find more training options in ./options/base_options.py and ./options/test_options.py
 
+## cyCADA train
+
+1. you need to train the downstream task first, run [train_resnet_18.py](train_resnet_18.py) to train a classification net based on the real domain A
+
+2. create a folder for cyclegan checkpoint and put the trained resnet weight (.pth) file into the folder, rename the file as `latest_net_CLS.pth` (it will be used to generate CLS_loss)
+
+3. run cyclegan training using the following commands 
+    
+`--dataroot`:  cyclegan training data dir
+
+`--original_data_dir`: orginal data location for label alignment (it should contain every class folders)
+
+`--out_feature_num`: the number of classes in the classification task
+
+-  `python train_cyclegan.py --dataroot ./datasets/amazon2webcam --name amazon2webcam_cyCADA_128 --model cycle_gan_semantic --dataset_mode unalignedlabel --original_data_dir original_datasets/office_31/amazon --out_feature_num 31 --load_size 150 --crop_size 128 --display_winsize 128 --batch_size 16 --print_freq 200 --n_epochs 200 --n_epochs_decay 0 --D_lr_weight 0.5 --use_wandb --wandb_project_name photo2sketch_cyCADA_128 --wandb_key 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`
+
+
+
+
 ## Citation
 If you use this code for your research, please cite our papers.
 ```
