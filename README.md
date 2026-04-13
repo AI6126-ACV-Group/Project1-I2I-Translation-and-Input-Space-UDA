@@ -49,8 +49,12 @@ you can find more training options in ./options/base_options.py and ./options/te
 
 -  `python train_cyclegan.py --dataroot ./datasets/amazon2webcam --name amazon2webcam_cyCADA_128 --model cycle_gan_semantic --dataset_mode unalignedlabel --original_data_dir original_datasets/office_31/amazon --out_feature_num 31 --load_size 150 --crop_size 128 --display_winsize 128 --batch_size 16 --print_freq 200 --n_epochs 200 --n_epochs_decay 0 --D_lr_weight 0.5 --use_wandb --wandb_project_name photo2sketch_cyCADA_128 --wandb_key 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`
 
+4. use [cycle_gan_generate.py](cycle_gan_generate.py) to genetate the Fake domain B data
 
+5. run [train_adda_net.py](train_adda_net.py) to generated finetuned resnet18
 
+## evaluation
+You can use [UDA_test.py](UDA_test.py) to test your UDA approach 
 
 ## Citation
 If you use this code for your research, please cite our papers.
