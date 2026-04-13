@@ -7,6 +7,9 @@ from PIL import Image
 import random
 import numpy as np
 import torch.optim as optim
+import logging
+from matplotlib import pyplot as plt
+import shutil
 
 ## 与 cycle Gan 训练时使用相同的rescale 方法
 class RescaleShortSide (object):
@@ -84,9 +87,36 @@ def prepare_data(data_dir, load_size=128, crop_size=128, batch_size=32):
     print(f"Dataset Split: Train={n_train}, Val={n_val}, Test={n_test}")
     return train_loader, val_loader, test_loader
 
+# 配置日志设置
+def setup_logger(save_path):
+    log_dir = os.path.dirname(save_path)
+    # --- 核心修改：如果文件夹存在，先清空再创建 ---
+    if os.path.exists(log_dir):
+        shutil.rmtree(log_dir)  # 彻底删除旧文件夹及其内容
+    os.makedirs(log_dir, exist_ok=True)  # 重新创建干净的文件夹
+
+    log_file = os.path.join(log_dir, 'train_log.txt')
+
+    # 彻底重置 root logger，防止重复运行脚本时日志不刷新
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, mode='w'),  # 'w' 模式确保覆盖
+            logging.StreamHandler()
+        ]
+    )
+    return logging.getLogger(__name__)
+
+
 def train_model(train_loader, val_loader, out_features=31, num_epochs=50, lr=1e-4,
                 patience=5, save_path='./checkpoints/resnet18_amazon.pth'):
+    logger = setup_logger(save_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     model = models.resnet18(pretrained=True)
     model.fc = nn.Linear(model.fc.in_features, out_features)
     model.to(device)
@@ -98,8 +128,10 @@ def train_model(train_loader, val_loader, out_features=31, num_epochs=50, lr=1e-
     best_val_loss = float('inf')
     epochs_no_improve = 0
 
-    print(f"Starting training on {device} with Early Stopping...")
+    # 用于绘图的数据记录
+    history = {'train_loss': [], 'val_loss': [], 'val_acc': []}
 
+    logger.info(f"Starting training on {device} | Total Epochs: {num_epochs} | LR: {lr}")
     for epoch in range(num_epochs):
         # --- 训练阶段 ---
         model.train()
@@ -132,30 +164,41 @@ def train_model(train_loader, val_loader, out_features=31, num_epochs=50, lr=1e-
 
         avg_val_loss = val_loss / len(val_loader)
         val_acc = 100 * correct / total
-        current_lr = optimizer.param_groups[0]['lr']
+        current_lr = optimizer.param_groups[-1]['lr']
         scheduler.step()
 
-        print(f"Epoch [{epoch + 1}/{num_epochs}] Train Loss: {avg_train_loss:.4f} | "
-              f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}% | LR: {current_lr:.6f}")
+        # 记录数据
+        history['train_loss'].append(avg_train_loss)
+        history['val_loss'].append(avg_val_loss)
+        history['val_acc'].append(val_acc)
+
+        # 使用 Logger 输出
+        log_msg = (f"Epoch [{epoch + 1}/{num_epochs}] Train Loss: {avg_train_loss:.4f} | "
+                   f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}% | LR: {current_lr:.6f}")
+        logger.info(log_msg)
+
         # --- 早停判断 ---
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_no_improve = 0
-            # 只在验证集表现提升时保存模型
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save(model.state_dict(), save_path)
-            print(f"--> Best model saved with Val Loss: {avg_val_loss:.4f}")
+            logger.info(f"--> Best model saved (Val Loss: {avg_val_loss:.4f})")
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= patience:
-                print(f"Early stopping triggered after {epoch + 1} epochs.")
+                logger.warning(f"Early stopping triggered at epoch {epoch + 1}")
                 break
 
-    # 加载表现最好的那一版进行返回
+    # 绘制训练曲线
+    plot_training_history(history, save_path)
+
+    # 加载最佳模型
     model.load_state_dict(torch.load(save_path))
     return model
 
-def evaluate_model(model, test_loader):
+
+def evaluate_model(model, test_loader, logger=None):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
@@ -168,45 +211,140 @@ def evaluate_model(model, test_loader):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+
     accuracy = 100 * correct / total
-    print(f'Evaluation Accuracy: {accuracy:.2f}%')
+    msg = f'Final Evaluation Accuracy: {accuracy:.2f}%'
+    if logger:
+        logger.info(msg)
+    else:
+        print(msg)
     return accuracy
+
+
+def plot_training_history(history, save_path):
+    """保存训练曲线图"""
+    plt.figure(figsize=(12, 4))
+
+    # Loss 曲线
+    plt.subplot(1, 2, 1)
+    plt.plot(history['train_loss'], label='Train Loss')
+    plt.plot(history['val_loss'], label='Val Loss')
+    plt.title('Loss History')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    # Accuracy 曲线
+    plt.subplot(1, 2, 2)
+    plt.plot(history['val_acc'], label='Val Acc')
+    plt.title('Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy (%)')
+    plt.legend()
+
+    plot_path = os.path.join(os.path.dirname(save_path), 'training_curves.png')
+    plt.savefig(plot_path)
+    plt.close()
 
 
 if __name__ == "__main__":
 
-    ## office 31 real amazon
-    #Early stopping triggered after 14 epochs.
-    #Testing on Amazon test split:
-    #Evaluation Accuracy: 82.77%
     '''
+    ## office 31 real amazon
     batch_size=32
     out_features=31
     num_epochs=20
-    save_path = 'checkpoints/Resnet_REAL_domain/resnet18_amazon.pth'
-
+    save_path = 'checkpoints/Resnet_REAL_amazon/resnet18_amazon.pth'
     train_loader, val_loader, test_loader = prepare_data('original_datasets/office_31/amazon', load_size=128, crop_size=128, batch_size=batch_size)
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs, save_path=save_path)
-    # 3. 检验模型
-    print("Testing on Amazon test split:")
-    evaluate_model(trained_model, test_loader)
-    '''
+    
 
-    full_dataset = datasets.ImageFolder('original_datasets/office_31/amazon')
-    print(full_dataset.class_to_idx)
+    ## office 31 real amazon2webcam cyclegan
+    batch_size = 32
+    out_features = 31
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_amazon2webcam_cyclegan/resnet18_amazon2webcam_cyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyclegan_128/amazon2webcam', load_size=128, crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+
+    ## office 31 real amazon2webcam fgcyclegan
+    batch_size = 32
+    out_features = 31
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_amazon2webcam_fgcyclegan/resnet18_amazon2webcam_fgcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/fg_cyclegan_128/amazon2webcam',
+                                                         load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+    '''
 
     '''
     ## officehome real art
     batch_size = 32
     out_features = 65
     num_epochs = 20
-    save_path = 'checkpoints/Resnet_REAL_domain/resnet18_art.pth'
-    train_loader, val_loader, test_loader = prepare_data('original_datasets/officehome/Art', load_size=128,
-                                                         crop_size=128, batch_size=batch_size)
+    save_path = 'checkpoints/Resnet_REAL_art/resnet18_art.pth'
+    train_loader, val_loader, test_loader = prepare_data('original_datasets/officehome/Art', load_size=128, crop_size=128, batch_size=batch_size)
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs, save_path=save_path)
-    # 3. 检验模型
-    print("Testing on Art test split:")
-    evaluate_model(trained_model, test_loader)
     '''
+
+    ## officehome art2realworld cyclegan
+    batch_size = 32
+    out_features = 65
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_art2realworld_cyclegan/resnet18_art2realworld_cyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyclegan_128/art2realword', load_size=128, crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+
+    ## officehome art2realworld fgcyclegan
+    batch_size = 32
+    out_features = 65
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_art2realworld_fgcyclegan/resnet18_art2realworld_fgcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/fg_cyclegan_128/art2realword', load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+
+    '''
+    ## PACS real photo
+    batch_size = 32
+    out_features = 7
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_REAL_photo/resnet18_photo.pth'
+    train_loader, val_loader, test_loader = prepare_data('original_datasets/PACS/photo', load_size=128, crop_size=128,
+                                                         batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+    '''
+
+    ## PACS photo2sketch cyclegan
+    batch_size = 32
+    out_features = 7
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_photo2sketch_cyclegan/resnet18_photo2sketch_cyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyclegan_128/photo2sketch', load_size=128,crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,save_path=save_path)
+
+    ## PACS photo2sketch fg_cyclegan
+    batch_size = 32
+    out_features = 7
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_photo2sketch_fgcyclegan/resnet18_photo2sketch_fgcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/fg_cyclegan_128/photo2sketch', load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+

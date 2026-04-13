@@ -85,16 +85,16 @@ def generate_fake_dataset(data_dir, model_path, output_dir, load_size=128, gpu_i
 
 if __name__ == "__main__":
     # 配置你的路径
-    #SRC_DIR = './original_datasets/office_31/amazon'
-    #CHECKPOINT = './checkpoints/amazon2webcam_cyclegan_128/latest_net_G_A.pth'
-    #DEST_DIR = './transformed_dataset/cyclegan_128/amazon2webcam'
+    SRC_DIR = './original_datasets/office_31/amazon'
+    CHECKPOINT = './checkpoints/amazon2webcam_cyCADA_128/latest_net_G_A.pth'
+    DEST_DIR = './transformed_dataset/cyCADA/amazon2webcam'
 
     #SRC_DIR = './original_datasets/officehome/Art'
     #CHECKPOINT = './checkpoints/art2realworld_cyclegan_128/latest_net_G_A.pth'
     #DEST_DIR = './transformed_dataset/cyclegan_128/art2realword'
 
-    SRC_DIR = './original_datasets/PACS/photo'
-    CHECKPOINT = './checkpoints/photo2sketch_fg_cyclegan_128/latest_net_G_A.pth'
-    DEST_DIR = './transformed_dataset/fg_cyclegan_128/photo2sketch'
+    #SRC_DIR = './original_datasets/PACS/photo'
+    #CHECKPOINT = './checkpoints/photo2sketch_fg_cyclegan_128/latest_net_G_A.pth'
+    #DEST_DIR = './transformed_dataset/fg_cyclegan_128/photo2sketch'
 
     generate_fake_dataset(SRC_DIR, CHECKPOINT, DEST_DIR)
