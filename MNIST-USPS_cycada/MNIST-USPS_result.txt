@@ -1,0 +1,38 @@
+baseline 分别是
+1. Amazon -> Webcam
+训练集：Amazon
+测试集：Webcam
+模型：ResNet-18
+指标：Webcam 上的 Top-1 accuracy
+2. Art -> Real-World
+训练集：Art
+测试集：Real-World
+模型：ResNet-18
+指标：Real-World 上的 Top-1 accuracy
+3. Photo -> Sketch
+训练集：Photo
+测试集：Sketch
+模型：ResNet-18
+指标：Sketch 上的 Top-1 accuracy
+
+4. MNIST → USPS
+source-only baseline：
+mnist训练模型，在usps上测试
+Source test accuracy (mnist): 99.62%
+Target test accuracy (usps): 81.22%
+
+translated-source baseline：
+读取 mnist2usps.zip 里的“MNIST 被翻译成 USPS 风格”的图像。
+从文件名里取出原始标签，比如 2_06635_fake_B.png 会被解析成标签 2。
+用这些“长得像 USPS 的 MNIST 图像 + 原来的 MNIST 标签”训练一个 ResNet-18 分类器。
+训练完后，在真正的 USPS test set 上测试。
+Translated validation accuracy: 98.40%
+Target test accuracy (usps): 90.93%
+
+cycada：
+对 MNIST -> USPS： 用 MNIST as USPS
+
+Best checkpoint: /root/outputs/cycada_feature/mnist_as_usps_to_usps/best.pth
+Last checkpoint: /root/outputs/cycada_feature/mnist_as_usps_to_usps/last.pth
+Proxy validation accuracy: 18.20%
+Target test accuracy (usps): 21.57%
