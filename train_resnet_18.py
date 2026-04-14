@@ -284,6 +284,20 @@ if __name__ == "__main__":
     '''
 
     '''
+    ## office 31 real amazon2webcam semcyclegan
+    batch_size = 32
+    out_features = 31
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_amazon2webcam_semcyclegan/resnet18_amazon2webcam_semcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyCADA/amazon2webcam',
+                                                         load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+    '''
+
+    '''
     ## officehome real art
     batch_size = 32
     out_features = 65
@@ -293,7 +307,7 @@ if __name__ == "__main__":
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs, save_path=save_path)
     '''
-
+    '''
     ## officehome art2realworld cyclegan
     batch_size = 32
     out_features = 65
@@ -303,13 +317,27 @@ if __name__ == "__main__":
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
                                 save_path=save_path)
+   '''
 
+    '''
     ## officehome art2realworld fgcyclegan
     batch_size = 32
     out_features = 65
     num_epochs = 20
     save_path = 'checkpoints/Resnet_art2realworld_fgcyclegan/resnet18_art2realworld_fgcyclegan.pth'
     train_loader, val_loader, test_loader = prepare_data('transformed_dataset/fg_cyclegan_128/art2realword', load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)
+    '''
+    ## officehome art2realworld semcyclegan
+    batch_size = 32
+    out_features = 65
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_art2realworld_semcyclegan/resnet18_art2realworld_semcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyCADA/art2realword',
+                                                         load_size=128,
                                                          crop_size=128, batch_size=batch_size)
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
@@ -328,6 +356,7 @@ if __name__ == "__main__":
                                 save_path=save_path)
     '''
 
+    '''
     ## PACS photo2sketch cyclegan
     batch_size = 32
     out_features = 7
@@ -336,7 +365,9 @@ if __name__ == "__main__":
     train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyclegan_128/photo2sketch', load_size=128,crop_size=128, batch_size=batch_size)
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,save_path=save_path)
+    '''
 
+    '''
     ## PACS photo2sketch fg_cyclegan
     batch_size = 32
     out_features = 7
@@ -347,4 +378,16 @@ if __name__ == "__main__":
     # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
     trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
                                 save_path=save_path)
+    '''
 
+    ## PACS photo2sketch semcyclegan
+    batch_size = 32
+    out_features = 7
+    num_epochs = 20
+    save_path = 'checkpoints/Resnet_photo2sketch_semcyclegan/resnet18_photo2sketch_semcyclegan.pth'
+    train_loader, val_loader, test_loader = prepare_data('transformed_dataset/cyCADA/photo2sketch',
+                                                         load_size=128,
+                                                         crop_size=128, batch_size=batch_size)
+    # 训练完成后会得到可以在 CycleGAN 里作为 netCLS 初始化的权重
+    trained_model = train_model(train_loader, val_loader, out_features=out_features, num_epochs=num_epochs,
+                                save_path=save_path)

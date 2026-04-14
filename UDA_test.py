@@ -80,10 +80,11 @@ if __name__ == "__main__":
     # 修改以下路径进行测试
     NEW_DATA_DIR = 'original_datasets/office_31/webcam'
     PTH_PATH_list=["checkpoints/Resnet_REAL_amazon/resnet18_amazon.pth",  #48.43%
-                   "checkpoints/Resnet_amazon2webcam_cyclegan/resnet18_amazon2webcam_cyclegan.pth", # 53.21%
-                   "checkpoints/Resnet_amazon2webcam_fgcyclegan/resnet18_amazon2webcam_fgcyclegan.pth"] # 56.98%
-
-    PTH_PATH_list = ["checkpoints/Resnet_amazon2webcam_cycada/resnet18_adda_optimized.pth"] # 54.84%
+                   "checkpoints/Resnet_amazon2webcam_cyclegan/resnet18_amazon2webcam_cyclegan.pth",      # 53.21%
+                   "checkpoints/Resnet_amazon2webcam_fgcyclegan/resnet18_amazon2webcam_fgcyclegan.pth",  # 56.98%
+                   "checkpoints/Resnet_amazon2webcam_semcyclegan/resnet18_amazon2webcam_semcyclegan.pth",  # 46 %
+                   "checkpoints/Resnet_amazon2webcam_cycada/resnet18_adda_optimized.pth",  # 59.12% / 52.58%
+                   "checkpoints/Resnet_amazon2webcam_cycada/resnet18_fg_adda_optimized.pth"]
 
     for PTH_PATH in PTH_PATH_list:
         test_model(
@@ -91,3 +92,39 @@ if __name__ == "__main__":
             weight_path=PTH_PATH,
             out_features=31  # 确保类别数与训练时一致
         )
+
+
+    NEW_DATA_DIR = 'original_datasets/officehome/Real World'
+    PTH_PATH_list = ["checkpoints/Resnet_REAL_art/resnet18_art.pth",  #48.82%
+                     "checkpoints/Resnet_art2realworld_cyclegan/resnet18_art2realworld_cyclegan.pth", #46.91%
+                     "checkpoints/Resnet_art2realworld_fgcyclegan/resnet18_art2realworld_fgcyclegan.pth",
+                     "checkpoints/Resnet_art2realworld_semcyclegan/resnet18_art2realworld_semcyclegan.pth",
+                     "checkpoints/Resnet_art2realworld_cycada/resnet18_adda_optimized.pth",  # 59.12% / 52.58%
+                     "checkpoints/Resnet_art2realworld_cycada/resnet18_fg_adda_optimized.pth"
+                     ]  #46.57%
+
+
+    for PTH_PATH in PTH_PATH_list:
+        test_model(
+            data_dir=NEW_DATA_DIR,
+            weight_path=PTH_PATH,
+            out_features=65  # 确保类别数与训练时一致
+        )
+
+    NEW_DATA_DIR = 'original_datasets/PACS/sketch'
+    PTH_PATH_list = ["checkpoints/Resnet_REAL_photo/resnet18_photo.pth", # 25.94%
+                     "checkpoints/Resnet_photo2sketch_cyclegan/resnet18_photo2sketch_cyclegan.pth", # 53.93%
+                     "checkpoints/Resnet_photo2sketch_fgcyclegan/resnet18_photo2sketch_fgcyclegan.pth",
+                     "checkpoints/Resnet_photo2sketch_semcyclegan/resnet18_photo2sketch_semcyclegan.pth",
+                     "checkpoints/Resnet_photo2sketch_cycada/resnet18_adda_optimized.pth",  # 59.12% / 52.58%
+                     "checkpoints/Resnet_photo2sketch_cycada/resnet18_fg_adda_optimized.pth"
+                     ] # 55.36%
+
+    for PTH_PATH in PTH_PATH_list:
+        test_model(
+            data_dir=NEW_DATA_DIR,
+            weight_path=PTH_PATH,
+            out_features=7  # 确保类别数与训练时一致
+        )
+
+

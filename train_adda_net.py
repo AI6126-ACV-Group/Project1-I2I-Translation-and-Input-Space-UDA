@@ -250,14 +250,13 @@ def train_adda(src_path, tgt_path, num_cls, num_epoch=200,
 
 
 if __name__ == '__main__':
-    src_path= "transformed_dataset/cyCADA/amazon2webcam"
-    tgt_path= "original_datasets/office_31/webcam"
-
+    src_path= "transformed_dataset/cyCADA/photo2sketch"
+    tgt_path= "original_datasets/PACS/sketch"
     num_epoch= 20
-    num_cls=31
+    num_cls=7
     batch=32
-    outdir= "checkpoints/Resnet_amazon2webcam_cycada"
-    src_weights='checkpoints/Resnet_REAL_amazon/resnet18_amazon.pth'
+    outdir= "checkpoints/Resnet_photo2sketch_cycada"
+    src_weights='checkpoints/Resnet_photo2sketch_semcyclegan/resnet18_photo2sketch_semcyclegan.pth'
     lr = 1e-6
     lr_d = 1e-5
     weight_decay = 1e-5

@@ -65,16 +65,36 @@ def get_scheduler(optimizer, opt):
     elif opt.lr_policy == "cosine":
         # opt.epoch_count 是恢复训练时的起始轮数
         # 如果从第 100 轮恢复，则 last_epoch 应设为 100
+        # 打印核心参数
+        import math
+        # 1. 确定最原始的基准学习率
+        # 这里我们根据你之前提供的逻辑：G 是 opt.lr，D 是 opt.lr * 0.5
         for group in optimizer.param_groups:
             if 'initial_lr' not in group:
                 group['initial_lr'] = group['lr']
-
+            if opt.continue_train:
+                # 这一步非常关键：在继续训练时，我们要手动确保 initial_lr 是它最初的那个值
+                # 你的 D 优化器在定义时 lr 是 0.00025，所以这里的 group['initial_lr'] 已经是正确的
+                pass
+        # 2. 正常定义 scheduler（为了后续训练中自动执行 step）
         scheduler = lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=opt.n_epochs,
-            eta_min=0,
-            last_epoch=opt.epoch_count - 1  # 关键修改
+            optimizer, T_max=opt.n_epochs, eta_min=0, last_epoch=opt.epoch_count - 1
         )
+        # 3. 【核心修复】手动强行对齐断点处的学习率
+        if opt.continue_train:
+            # 手动计算当前 epoch 应该对应的余弦比例
+            # 使用 opt.epoch_count - 1 是因为在这一轮开始前，我们要达到上一轮结束时的状态
+            progress = (opt.epoch_count - 1) / opt.n_epochs
+            manual_ratio = 0.5 * (1.0 + math.cos(math.pi * progress))
+            for group in optimizer.param_groups:
+                # 基于该 group 自己的 initial_lr 进行缩放
+                new_lr = group['initial_lr'] * manual_ratio
+                group['lr'] = new_lr
+            print(f"--- 断点对齐成功 ---")
+            print(f"Progress: {progress:.4f}, Ratio: {manual_ratio:.4f}")
+            print(f"New Learning Rate: {optimizer.param_groups[0]['lr']:.8f}")
+        return scheduler
+
     else:
         return NotImplementedError("learning rate policy [%s] is not implemented", opt.lr_policy)
     return scheduler
